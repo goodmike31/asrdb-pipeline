@@ -1,26 +1,72 @@
-from prefect import task, Flow, Parameter, utilities
+from prefect import task, Flow, Parameter
 from prefect.tasks.shell import ShellTask
+from os.path import join
+import os
+import sys
+import inspect
+import requests
+import datetime
+
+myself = lambda: inspect.stack()[1][3]
 
 test = ShellTask(name="print_date", command="date")
 
-# Task for downloading file from provided URL. Return path to downloaded data
+# TODO: read config with paths
+# TODO: design tests for config file
+
+dir_datalake = "/home/pnowak/development/data/asr/datalake"
+
+def download_file(url, filename):
+    with open(filename, 'wb') as f:
+        response = requests.get(url, stream=True)
+        total = response.headers.get('content-length')
+
+        if total is None:
+            f.write(response.content)
+        else:
+            downloaded = 0
+            total = int(total)
+            for data in response.iter_content(chunk_size = max(int(total/1000), 1024 * 1024)):
+                downloaded += len(data)
+                f.write(data)
+                done = int(50*downloaded/total)
+                sys.stdout.write('\r[{}{}]'.format('█' * done, '.' * (50-done)))
+                sys.stdout.flush()
+    sys.stdout.write('\n')
+
 @task
-def download(url_dl):
-    assert(url_dl.len()>0)
-    print("Downloading {}", url_dl)
-    #path_to_data=""
-    #return [path_dld]
+def download(url_dl, db_name, lang):
+    """Download speech corpora archive.
 
-with Flow('ETL') as flow:
+    Download archive from given URL.
+    Return path to downloaded archive.
+    """
+    task_name = myself()
+    assert(len(url_dl) > 0)
+    print('Downloading:\n%s' % url_dl)
+    path_dl = join(dir_datalake, task_name, db_name, lang)
+#    print("Creating dir:\n%s" % (path_dl))
+#    os.mkdir(path_dl,)
+    print('Saving to:\n%s' % (path_dl))
+    dt = datetime.datetime.now()
+
+    date = dt.strftime("%Y%m%d")
+    path_filename = join(path_dl, task_name, date+".dump")
+    print(path_filename)
+    download_file(url_dl, path_filename)
+    # path_to_data=""
+    # return [path_dld]
+
+
+with Flow('ASRDB Pipeline') as flow:
     url_dl = Parameter('url_dl')
-    download(url_dl)
-#    mapped_result = map_fn.map(numbers)
-#    reduced_result = reduce_fn(mapped_result)
+    db_name = Parameter('db_name')
+    lang = Parameter('lang')
+    download(url_dl, db_name, lang)
 
-#flow.visualize()
-test_url_dl="https://clarin-pl.eu/dspace/bitstream/handle/11321/237/Mobile.zip?sequence=2&isAllowed=y"
-state = flow.run(parameters=dict(url_dl=test_url_dl)
-#print(state.result[h])
+# flow.visualize()
+test_db_name = "clarin"
+test_db_lang = "pl-PL"
+test_url_dl = "https://clarin-pl.eu/dspace/bitstream/handle/11321/237/Mobile.zip?sequence=2&isAllowed=y"
 
-#assert state.result[reduced_result].result == 9
-#print(state.result[e].result)
+state = flow.run(parameters=dict(url_dl=test_url_dl, db_name=test_db_name, lang=test_db_lang))
