@@ -28,9 +28,9 @@ def download_file(url, target_dir):
     path_dl = os.path.join(target_dir, filename)
     status_file = filename + ".done"
 
-    print('Saving to:\n%s' % (path_dl))
-    if (not os.path.exists(filename) & os.path.exists(status_file)):
-        with open(filename, 'wb') as f:
+    print('Saving as:\n%s' % (path_dl))
+    if (not os.path.exists(path_dl) & os.path.exists(status_file)):
+        with open(path_dl, 'wb') as f:
             response = requests.get(url, stream=True)
             total = response.headers.get('content-length')
 
