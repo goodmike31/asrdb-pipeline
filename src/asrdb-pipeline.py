@@ -105,7 +105,8 @@ def download(url, db_name, lang):
     # TODO replace manually checked status file passed as argument with
     # native target with varying filename
 
-    status_file = filename + ".done"
+    status_file = os.path.join(target_dir, filename, ".done")
+
     path_to_data = download_file(status_file, url, path_dl)
 
     return [path_to_data]
