@@ -59,7 +59,8 @@ def download_file(status_file, url, path_dl):
                     sys.stdout.flush()
         sys.stdout.write('\n')
         Path(status_file).touch()
-        print('Succesfully saved as:\n%s' % (path_dl))
+        print(status_file)
+        print("Download completed")
     else:
         print ("File already downloaded.")
 
