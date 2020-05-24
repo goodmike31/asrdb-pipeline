@@ -5,12 +5,10 @@ from prefect.tasks.shell import ShellTask
 from os.path import join
 import os
 import sys
-import inspect
 import requests
 import datetime
 from pathlib import Path
-
-myself = lambda: inspect.stack()[1][3]
+import zipfile
 
 test = ShellTask(name="print_date", command="date")
 
@@ -40,10 +38,21 @@ date = dt.strftime("%Y%m%d")
 
 #  #TODO add target file ".done" for given URL or target path"
 
-def download_file(status_file: str, url: str, path_dl: str):
+
+
+def list_files(startpath):
+    for root, dirs, files in os.walk(startpath):
+        level = root.replace(startpath, '').count(os.sep)
+        indent = ' ' * 4 * (level)
+        print('{}{}/'.format(indent, os.path.basename(root)))
+        subindent = ' ' * 4 * (level + 1)
+        for f in files:
+            print('{}{}'.format(subindent, f))
+
+def download_file(url: str, path_dl: str):
     """Download file for given URL into given directory."""
 
-    if (not os.path.exists(path_dl) & os.path.exists(status_file)):
+    if (not os.path.exists(path_dl)):
         print('Saving as:\n%s' % (path_dl))
         with open(path_dl, 'wb') as f:
             response = requests.get(url, stream=True)
@@ -61,9 +70,7 @@ def download_file(status_file: str, url: str, path_dl: str):
                     sys.stdout.write('\r[{}{}]'.format('█' * done, '.' * (50-done)))
                     sys.stdout.flush()
         sys.stdout.write('\n')
-        Path(status_file).touch()
         print("Download completed")
-        print(status_file)
     else:
         print ("File already downloaded.")
 
@@ -82,9 +89,29 @@ def target_dir_creator(task_name):
 
     return target_dir
 
+def extract_to_target_dir(path_to_zip_file, directory_to_extract_to):
+    # check extension of archive
+    filepath, extension = os.path.splitext(path_to_zip_file)
+    filename = os.path.basename(filepath)
+    path_to_extracted_data = os.path.join(directory_to_extract_to, filename)
+    if (not os.path.exists(path_to_extracted_data)):
+        if (extension == ".zip"):
+            # extract zip
+            with zipfile.ZipFile(path_to_zip_file, 'r') as zip_ref:
+                zip_ref.extractall(directory_to_extract_to)
+            print("Extraction completed.")
+        else:
+            print("No handler for files with extension: ", extension)
+    else:
+        print ("File already extracted.")
+    print(path_to_extracted_data)
+    return path_to_extracted_data
+
 # PREFECT TASKS
-@task(log_stdout=True, checkpoint=True,
-result_handler = LocalResultHandler(dir = "/home/pnowak/development/data/workspace/asrdb-pipeline"))
+# @task(log_stdout=True, checkpoint=True,
+# result_handler = LocalResultHandler(dir = "/home/pnowak/development/data/workspace/asrdb-pipeline"))
+
+@task
 def download(url: str, db_name: str, lang: str)-> str:
     """Download speech corpora archive.
 
@@ -92,7 +119,7 @@ def download(url: str, db_name: str, lang: str)-> str:
     Return path to downloaded archive.
     """
     # get name of the current prefect task
-    task_name = myself()
+    task_name = "download"
     # check if URL download path is not empty
     assert(len(url) > 0)
     print('Requesting download:\n%s' % url)
@@ -106,38 +133,42 @@ def download(url: str, db_name: str, lang: str)-> str:
     filename = filename.split("?")[0]
     # check if file name is valid
     # TODO check all forbidden charaters, length etc. - maybe some library?
-
     target_dir = target_dir_creator(task_name)
-
     # create target file location from datalake dir and extracted filename
     path_dl = os.path.join(target_dir, filename)
     # TODO replace manually checked status file passed as argument with
     # native target with varying filename
 
-    status_file = os.path.join(target_dir, filename + ".done")
-
-    download_file(status_file, url, path_dl)
+    download_file(url, path_dl)
     # return 3
     return path_dl
 
 
-@task(log_stdout=True)
-def extract (path_to_archive: str) -> str:
+@task
+def extract(path_to_archive):
     """Extract speech corpora archive.
-
     Extract archive for a given path.
     Return path to extracted archive.
     """
+    task_name = "extract"
+    target_dir = target_dir_creator(task_name)
+    print("Extracting:\n%s\nto:\n%s" % (path_to_archive, target_dir))
+    path_to_dir = extract_to_target_dir(path_to_archive, target_dir)
+    return path_to_dir
+
+@task(log_stdout=True)
+def inspect (path_to_folder: str) -> str:
+    """Inspect original content and structre of the speech corpora.
+    """
     # get name of the current prefect task
-    task_name = myself()
+    task_name = "inspect"
     # check if path to audio archive is valid
-    assert(len(path_to_archive) > 0 & os.path.exists(path_to_archive))
     target_dir = target_dir_creator(task_name)
 
-    print("Extracting:\n%s\nto:\n%s" % (path_to_archive, target_dir))
+    print("Inspecting:\n%s\n" % (path_to_folder))
+    list_files(path_to_folder)
 
-    return path_to_archive
-
+    return path_to_folder
 
 with Flow('ASRDB Pipeline') as flow:
     url = Parameter('url')
@@ -146,12 +177,9 @@ with Flow('ASRDB Pipeline') as flow:
 
     #TODO fix passing results of tasks
     path_data_raw = download(url=url, db_name=db_name, lang=lang)
-    path_data_extracted = extract("Test")
+    path_data_extracted = extract(path_data_raw)
+    path_data_inspected = inspect(path_data_extracted)
 
-#flow.visualize()
+flow.visualize()
+
 state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
-
-# TODO how to get by task name?
-dl_task_ref = flow.get_tasks()[0]
-print(state.result[dl_task_ref]._result.value)
-print(state.result[dl_task_ref]._result.location)
