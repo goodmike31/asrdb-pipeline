@@ -1,5 +1,6 @@
 from prefect import task, Flow, Parameter
 from prefect.engine.results import LocalResult
+from prefect.engine.result_handlers import LocalResultHandler
 from prefect.tasks.shell import ShellTask
 from os.path import join
 import os
@@ -39,7 +40,7 @@ date = dt.strftime("%Y%m%d")
 
 #  #TODO add target file ".done" for given URL or target path"
 
-def download_file(status_file, url, path_dl):
+def download_file(status_file: str, url: str, path_dl: str):
     """Download file for given URL into given directory."""
 
     if (not os.path.exists(path_dl) & os.path.exists(status_file)):
@@ -80,11 +81,11 @@ def target_dir_creator(task_name):
         os.makedirs(target_dir)
 
     return target_dir
-# PREFECT TASKS
-# @task
 
-@task(log_stdout=True)
-def download(url, db_name, lang):
+# PREFECT TASKS
+@task(log_stdout=True, checkpoint=True,
+result_handler = LocalResultHandler(dir = "/home/pnowak/development/data/workspace/asrdb-pipeline"))
+def download(url: str, db_name: str, lang: str)-> str:
     """Download speech corpora archive.
 
     Download archive from given URL.
@@ -116,12 +117,12 @@ def download(url, db_name, lang):
     status_file = os.path.join(target_dir, filename + ".done")
 
     download_file(status_file, url, path_dl)
-
-    return [path_dl]
+    # return 3
+    return path_dl
 
 
 @task(log_stdout=True)
-def extract (path_data_compressed):
+def extract (path_to_archive: str) -> str:
     """Extract speech corpora archive.
 
     Extract archive for a given path.
@@ -130,12 +131,12 @@ def extract (path_data_compressed):
     # get name of the current prefect task
     task_name = myself()
     # check if path to audio archive is valid
-    print(path_data_compressed)
-#    assert(len(path_data_compressed) > 0 & os.path.exists(path_data_compressed))
+    assert(len(path_to_archive) > 0 & os.path.exists(path_to_archive))
     target_dir = target_dir_creator(task_name)
 
-    print("Extracting:\n%s\nto:\n%s" % (path_data_compressed, target_dir))
+    print("Extracting:\n%s\nto:\n%s" % (path_to_archive, target_dir))
 
+    return path_to_archive
 
 
 with Flow('ASRDB Pipeline') as flow:
@@ -144,15 +145,13 @@ with Flow('ASRDB Pipeline') as flow:
     lang = Parameter('lang')
 
     #TODO fix passing results of tasks
-    path_data_raw = download(url, db_name, lang)
+    path_data_raw = download(url=url, db_name=db_name, lang=lang)
+    path_data_extracted = extract("Test")
 
-    #path_data_extracted = extract(path_data_raw)
-    #print(path_data_extracted)
-
-# flow.visualize()
-#state = flow.run()
+#flow.visualize()
 state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
 
 # TODO how to get by task name?
 dl_task_ref = flow.get_tasks()[0]
-print(state.result[dl_task_ref]._result)
+print(state.result[dl_task_ref]._result.value)
+print(state.result[dl_task_ref]._result.location)
