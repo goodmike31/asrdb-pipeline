@@ -2,6 +2,7 @@ from prefect import task, Flow, Parameter
 from prefect.engine.results import LocalResult
 from prefect.engine.result_handlers import LocalResultHandler
 from prefect.tasks.shell import ShellTask
+from prefect.utilities.debug import raise_on_exception
 from os.path import join
 import os
 import sys
@@ -94,12 +95,15 @@ def extract_to_target_dir(path_to_zip_file, directory_to_extract_to):
     filepath, extension = os.path.splitext(path_to_zip_file)
     filename = os.path.basename(filepath)
     path_to_extracted_data = os.path.join(directory_to_extract_to, filename)
-    if (not os.path.exists(path_to_extracted_data)):
+    status_file = path_to_extracted_data + ".done"
+    if (not os.path.exists(status_file)):
         if (extension == ".zip"):
             # extract zip
             with zipfile.ZipFile(path_to_zip_file, 'r') as zip_ref:
                 zip_ref.extractall(directory_to_extract_to)
-            print("Extraction completed.")
+            print("Extraction completed")
+            p = Path(status_file)
+            p.touch()
         else:
             print("No handler for files with extension: ", extension)
     else:
@@ -180,6 +184,6 @@ with Flow('ASRDB Pipeline') as flow:
     path_data_extracted = extract(path_data_raw)
     path_data_inspected = inspect(path_data_extracted)
 
-flow.visualize()
-
-state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
+with raise_on_exception():
+    flow.visualize()
+    state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
