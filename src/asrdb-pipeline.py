@@ -18,17 +18,19 @@ test = ShellTask(name="print_date", command="date")
 
 dir_datalake = "/home/pnowak/development/data/asr/datalake"
 
-# db_name_t = "clarin"
-# db_lang_t = "pl-PL"
-# url_t = "https://clarin-pl.eu/dspace/bitstream/handle/11321/237/Mobile.zip?sequence=2&isAllowed=y"
-# db_name_t = "librispeech"
-# db_lang_t = "en-US"
-# url_t = "http://www.openslr.org/resources/12/dev-clean.tar.gz"
-db_name_t = "crowdsourced_hq_arg_speech"
-lang_t = "es-AR"
-url_t = "http://www.openslr.org/resources/61/es_ar_male.zip"
+# db_name_run_t = "clarin"
+# db_lang_run = "pl-PL"
+# url_run = "https://clarin-pl.eu/dspace/bitstream/handle/11321/237/Mobile.zip?sequence=2&isAllowed=y"
+# db_name_run = "librispeech"
+# db_lang_run = "en-US"
+# url_run = "http://www.openslr.org/resources/12/dev-clean.tar.gz"
+db_name_run = "crowdsourced_hq_arg_speech"
+lang_run = "es-AR"
+url_run = "http://www.openslr.org/resources/61/es_ar_male.zip"
 
 # COMMON FUNCTIONS
+dt = datetime.datetime.now()
+date = dt.strftime("%Y%m%d")
 
 # create a task via the task decorator
 #@task(target="func_task_target.txt", checkpoint=True, result_handler=LocalResult(dir="~/.prefect"))
@@ -59,18 +61,29 @@ def download_file(status_file, url, path_dl):
                     sys.stdout.flush()
         sys.stdout.write('\n')
         Path(status_file).touch()
-        print(status_file)
         print("Download completed")
+        print(status_file)
     else:
         print ("File already downloaded.")
 
+
+def target_dir_creator(task_name):
+    """Create target dir for prefect task.
+
+    Generate target dir for given task name and runtime parameters.
+    """
+    #print (type(task_name))
+    target_dir = join(dir_datalake, db_name_run, lang_run, task_name)
+
+    if not os.path.exists(target_dir):
+        print("Creating dir:\n%s" % (target_dir))
+        os.makedirs(target_dir)
+
+    return target_dir
 # PREFECT TASKS
 # @task
 
-
-# with prefect.context(lang=lang, db_name=db_name):
-#@task(target="test.done", checkpoint=True, result_handler=LocalResult(dir="~/.prefect"))
-@task
+@task(log_stdout=True)
 def download(url, db_name, lang):
     """Download speech corpora archive.
 
@@ -84,15 +97,7 @@ def download(url, db_name, lang):
     print('Requesting download:\n%s' % url)
 
     # create directory for download and target path for download function
-    # consists of data lake directory, task name, name of DB, lang and date
-    dt = datetime.datetime.now()
-    date = dt.strftime("%Y%m%d")
-
-    target_dir = join(dir_datalake, db_name, lang, task_name, date)
-
-    if not os.path.exists(target_dir):
-        print("Creating dir:\n%s" % (target_dir))
-        os.makedirs(target_dir)
+    # consists of data lake directory, name of DB and lang
 
     # get filename, assuming it's located at the end of URL
     filename = os.path.basename(url)
@@ -101,28 +106,53 @@ def download(url, db_name, lang):
     # check if file name is valid
     # TODO check all forbidden charaters, length etc. - maybe some library?
 
+    target_dir = target_dir_creator(task_name)
+
     # create target file location from datalake dir and extracted filename
     path_dl = os.path.join(target_dir, filename)
     # TODO replace manually checked status file passed as argument with
     # native target with varying filename
 
-    status_file = os.path.join(target_dir, filename, ".done")
+    status_file = os.path.join(target_dir, filename + ".done")
 
-    path_to_data = download_file(status_file, url, path_dl)
+    download_file(status_file, url, path_dl)
 
-    return [path_to_data]
-#@task
-#def extract (path):
+    return [path_dl]
+
+
+@task(log_stdout=True)
+def extract (path_data_compressed):
+    """Extract speech corpora archive.
+
+    Extract archive for a given path.
+    Return path to extracted archive.
+    """
+    # get name of the current prefect task
+    task_name = myself()
+    # check if path to audio archive is valid
+    print(path_data_compressed)
+#    assert(len(path_data_compressed) > 0 & os.path.exists(path_data_compressed))
+    target_dir = target_dir_creator(task_name)
+
+    print("Extracting:\n%s\nto:\n%s" % (path_data_compressed, target_dir))
+
+
 
 with Flow('ASRDB Pipeline') as flow:
     url = Parameter('url')
     db_name = Parameter('db_name')
     lang = Parameter('lang')
 
-
+    #TODO fix passing results of tasks
     path_data_raw = download(url, db_name, lang)
+
     #path_data_extracted = extract(path_data_raw)
+    #print(path_data_extracted)
 
 # flow.visualize()
+#state = flow.run()
+state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
 
-state = flow.run(parameters=dict(url=url_t, db_name=db_name_t, lang=lang_t))
+# TODO how to get by task name?
+dl_task_ref = flow.get_tasks()[0]
+print(state.result[dl_task_ref]._result)
