@@ -32,23 +32,16 @@ url_run = "http://www.openslr.org/resources/61/es_ar_male.zip"
 dt = datetime.datetime.now()
 date = dt.strftime("%Y%m%d")
 
-# create a task via the task decorator
-#@task(target="func_task_target.txt", checkpoint=True, result_handler=LocalResult(dir="~/.prefect"))
-#def func_task():
-#    return 99
-
-#  #TODO add target file ".done" for given URL or target path"
-
-
-
 def list_files(startpath):
+    print("Making directory tree")
+    print(startpath)
     for root, dirs, files in os.walk(startpath):
         level = root.replace(startpath, '').count(os.sep)
         indent = ' ' * 4 * (level)
         print('{}{}/'.format(indent, os.path.basename(root)))
         subindent = ' ' * 4 * (level + 1)
         for f in files:
-            print('{}{}'.format(subindent, f))
+            # print('{}{}'.format(subindent, f))
 
 def download_file(url: str, path_dl: str):
     """Download file for given URL into given directory."""
@@ -100,7 +93,7 @@ def extract_to_target_dir(path_to_zip_file, directory_to_extract_to):
         if (extension == ".zip"):
             # extract zip
             with zipfile.ZipFile(path_to_zip_file, 'r') as zip_ref:
-                zip_ref.extractall(directory_to_extract_to)
+                zip_ref.extractall(path_to_extracted_data)
             print("Extraction completed")
             p = Path(status_file)
             p.touch()
@@ -185,5 +178,5 @@ with Flow('ASRDB Pipeline') as flow:
     path_data_inspected = inspect(path_data_extracted)
 
 with raise_on_exception():
-    flow.visualize()
+    # flow.visualize()
     state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
