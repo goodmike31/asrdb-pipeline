@@ -24,9 +24,16 @@ dir_datalake = "/home/pnowak/development/data/asr/datalake"
 # db_name_run = "librispeech"
 # db_lang_run = "en-US"
 # url_run = "http://www.openslr.org/resources/12/dev-clean.tar.gz"
+#f = open("config.tsv", "r")
+#for line in f:
+#    print(line)
+#print(f.readline())
+#f.close()
+
 db_name_run = "crowdsourced_hq_arg_speech"
 lang_run = "es-AR"
 url_run = "http://www.openslr.org/resources/61/es_ar_male.zip"
+
 
 # COMMON FUNCTIONS
 dt = datetime.datetime.now()
@@ -40,8 +47,8 @@ def list_files(startpath):
         indent = ' ' * 4 * (level)
         print('{}{}/'.format(indent, os.path.basename(root)))
         subindent = ' ' * 4 * (level + 1)
-        for f in files:
-            # print('{}{}'.format(subindent, f))
+        # for f in files:
+        # print('{}{}'.format(subindent, f))
 
 def download_file(url: str, path_dl: str):
     """Download file for given URL into given directory."""
@@ -137,6 +144,7 @@ def download(url: str, db_name: str, lang: str)-> str:
     # native target with varying filename
 
     download_file(url, path_dl)
+
     # return 3
     return path_dl
 
@@ -177,6 +185,8 @@ with Flow('ASRDB Pipeline') as flow:
     path_data_extracted = extract(path_data_raw)
     path_data_inspected = inspect(path_data_extracted)
 
-with raise_on_exception():
+#with raise_on_exception():
     # flow.visualize()
-    state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
+#    state = flow.run(parameters=dict(url=url_run, db_name=db_name_run, lang=lang_run))
+
+flow.register()
